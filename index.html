@@ -41,6 +41,26 @@
                 };
             }
 
+            window.addEventListener("keydown", (event) => {
+                if (event.repeat) return;
+
+                if (event.ctrlKey && event.code === "KeyG") {
+                    event.preventDefault();
+
+                    const inputText = prompt("请输入祝福语");
+                    if (inputText === null || inputText.length === 0) return;
+
+                    const text = encodeURIComponent(inputText);
+                    const prefix = window.location.href.split("?text=")[0];
+
+                    const outputUrl = `${prefix}?text=${text}`;
+                    window.navigator.clipboard.writeText(outputUrl);
+
+                    alert("祝福链接已复制到剪切板");
+                    return;
+                }
+            });
+
             const urlParams = getUrlParams();
 
             document.title = urlParams.text;
@@ -51,9 +71,9 @@
                 // 爱心配置
                 heartCount: 80, // 同时存在的最大爱心数量
                 heartSpawnInterval: 150, // 爱心生成间隔(ms)
-                maxSpawnPerFrame: 20, // 单帧最大生成数量
-                minHeartSize: 15, // 最小爱心尺寸
-                maxHeartSize: 90, // 最大爱心尺寸
+                maxSpawnPerFrame: 30, // 单帧最大生成数量
+                minHeartSize: 12, // 最小爱心尺寸
+                maxHeartSize: 120, // 最大爱心尺寸
 
                 // 文字配置
                 textFontSize: 48, // 基础字体大小
