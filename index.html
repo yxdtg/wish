@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, user-scalable=no"
+        />
+        <title>loading</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                width: 100%;
+                height: 100vh;
+                overflow: hidden;
+                background: #000;
+            }
+
+            canvas {
+                display: block;
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="canvas"></canvas>
+
+        <script>
+            function getUrlParams() {
+                const params = new URLSearchParams(window.location.search);
+                return {
+                    text: params.get("text") ?? "愿你岁岁平安 年年喜乐",
+                };
+            }
+
+            const urlParams = getUrlParams();
+
+            document.title = urlParams.text;
+
+            const CONFIG = {
+                blessingText: urlParams.text,
+
+                // 爱心配置
+                heartCount: 80, // 同时存在的最大爱心数量
+                heartSpawnInterval: 150, // 爱心生成间隔(ms)
+                maxSpawnPerFrame: 20, // 单帧最大生成数量
+                minHeartSize: 15, // 最小爱心尺寸
+                maxHeartSize: 90, // 最大爱心尺寸
+
+                // 文字配置
+                textFontSize: 48, // 基础字体大小
+                textGlowIntensity: 20, // 文字发光强度
+
+                // 配色方案
+                colors: {
+                    background: ["#1a0a2e", "#2d1b4e", "#4a1942"],
+                    hearts: [
+                        { primary: "#ff6b9d", secondary: "#ff8a80", highlight: "#ffcdd2" },
+                        { primary: "#e91e63", secondary: "#f06292", highlight: "#f8bbd0" },
+                        { primary: "#9c27b0", secondary: "#ba68c8", highlight: "#e1bee7" },
+                        { primary: "#673ab7", secondary: "#9575cd", highlight: "#d1c4e9" },
+                        { primary: "#ff4081", secondary: "#ff80ab", highlight: "#ffccbc" },
+                    ],
+                    text: {
+                        primary: "#ff69b4",
+                        secondary: "#ff1493",
+                        glow: "#ff69b4",
+                    },
+                },
+            };
+
+            const canvas = document.getElementById("canvas");
+            const ctx = canvas.getContext("2d");
+            let width, height;
+            let hearts = [];
+            let lastHeartTime = 0;
+            let lastFrameTime = 0;
+            let textWave = 0;
+            let typewriterIndex = 0;
+            let typewriterTimer = 0;
+
+            function resizeCanvas() {
+                const oldWidth = width;
+                const oldHeight = height;
+
+                width = window.innerWidth;
+                height = window.innerHeight;
+                canvas.width = width * window.devicePixelRatio;
+                canvas.height = height * window.devicePixelRatio;
+                ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+                if (oldWidth && oldHeight) {
+                    const scaleX = width / oldWidth;
+                    const scaleY = height / oldHeight;
+                    hearts.forEach((heart) => {
+                        heart.x *= scaleX;
+                        heart.y *= scaleY;
+                    });
+                }
+            }
+
+            class Heart {
+                constructor(x, y, size, color, isBurst = false) {
+                    this.x = x || Math.random() * width;
+                    this.y = y || height + 50;
+                    this.size =
+                        size || Math.random() * (CONFIG.maxHeartSize - CONFIG.minHeartSize) + CONFIG.minHeartSize;
+                    this.color = color || CONFIG.colors.hearts[Math.floor(Math.random() * CONFIG.colors.hearts.length)];
+
+                    if (isBurst) {
+                        this.speedY = Math.min(Math.max(Math.random() * 3 + 2, 2), 5);
+                        this.speedX = Math.min(Math.max((Math.random() - 0.5) * 4, -3), 3);
+                    } else {
+                        this.speedY = Math.min(Math.max(Math.random() * 1.5 + 0.5, 0.5), 2);
+                        this.speedX = Math.min(Math.max((Math.random() - 0.5) * 0.5, -0.3), 0.3);
+                    }
+
+                    this.rotation = Math.random() * Math.PI * 2;
+                    this.rotationSpeed = Math.min(Math.max((Math.random() - 0.5) * 0.02, -0.03), 0.03);
+                    this.scale = 1;
+                    this.opacity = isBurst ? 1 : Math.random() * 0.5 + 0.5;
+
+                    this.life = 1;
+                    this.decay = isBurst ? 0.008 : 0.002;
+                    this.wobble = Math.random() * Math.PI * 2;
+                    this.wobbleSpeed = Math.min(Math.max(Math.random() * 0.05 + 0.02, 0.02), 0.07);
+                }
+
+                update(deltaTime) {
+                    const timeScale = deltaTime / 16.67;
+
+                    this.y -= this.speedY * timeScale;
+                    this.x += (this.speedX + Math.sin(this.wobble) * 0.5) * timeScale;
+                    this.wobble += this.wobbleSpeed * timeScale;
+                    this.rotation += this.rotationSpeed * timeScale;
+
+                    this.life -= this.decay * timeScale;
+                    if (this.y < -this.size * 2 || this.x < -this.size || this.x > width + this.size) {
+                        this.life = 0;
+                    }
+
+                    this.scale = 1 + Math.sin(this.wobble * 2) * 0.1;
+                }
+
+                draw() {
+                    ctx.save();
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(this.rotation);
+                    ctx.scale(this.scale, this.scale);
+                    ctx.globalAlpha = Math.min(Math.max(this.life * this.opacity, 0), 1);
+
+                    this.draw3DHeart();
+
+                    ctx.restore();
+                }
+
+                draw3DHeart() {
+                    const s = this.size;
+                    const gradient = ctx.createRadialGradient(-s / 4, -s / 4, 0, 0, 0, s);
+                    gradient.addColorStop(0, this.color.highlight);
+                    gradient.addColorStop(0.3, this.color.primary);
+                    gradient.addColorStop(1, this.color.secondary);
+
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+
+                    ctx.moveTo(0, s * 0.3);
+                    ctx.bezierCurveTo(-s * 0.5, -s * 0.1, -s, s * 0.3, 0, s);
+                    ctx.bezierCurveTo(s, s * 0.3, s * 0.5, -s * 0.1, 0, s * 0.3);
+                    ctx.fill();
+
+                    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
+                    ctx.beginPath();
+                    ctx.ellipse(-s * 0.3, s * 0.2, s * 0.15, s * 0.1, -Math.PI / 4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            function drawBlessingText(deltaTime) {
+                const timeScale = deltaTime / 16.67;
+                const fontSize = Math.min(CONFIG.textFontSize, width * 0.08);
+                const text = CONFIG.blessingText.substring(0, typewriterIndex);
+
+                ctx.save();
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.font = `bold ${fontSize}px "Microsoft YaHei", sans-serif`;
+
+                for (let i = 3; i > 0; i--) {
+                    ctx.shadowColor = CONFIG.colors.text.glow;
+                    ctx.shadowBlur = CONFIG.textGlowIntensity * i;
+                    ctx.fillStyle = `rgba(255, 105, 180, ${0.1 * i})`;
+                    ctx.fillText(text, width / 2, height / 2 + Math.sin(textWave) * 10);
+                }
+
+                const gradient = ctx.createLinearGradient(0, height / 2 - fontSize, 0, height / 2 + fontSize);
+                gradient.addColorStop(0, "#fff");
+                gradient.addColorStop(0.5, CONFIG.colors.text.primary);
+                gradient.addColorStop(1, CONFIG.colors.text.secondary);
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = gradient;
+                ctx.fillText(text, width / 2, height / 2 + Math.sin(textWave) * 10);
+
+                ctx.strokeStyle = "rgba(255, 255, 255, 0.5)";
+                ctx.lineWidth = 1;
+                ctx.strokeText(text, width / 2, height / 2 + Math.sin(textWave) * 10);
+
+                ctx.restore();
+
+                if (typewriterIndex < CONFIG.blessingText.length) {
+                    typewriterTimer += timeScale;
+                    if (typewriterTimer > 10) {
+                        typewriterIndex++;
+                        typewriterTimer = 0;
+                    }
+                }
+
+                textWave += 0.03 * timeScale;
+            }
+
+            function drawBackground() {
+                const gradient = ctx.createLinearGradient(0, 0, width, height);
+                gradient.addColorStop(0, CONFIG.colors.background[0]);
+                gradient.addColorStop(0.5, CONFIG.colors.background[1]);
+                gradient.addColorStop(1, CONFIG.colors.background[2]);
+
+                ctx.fillStyle = gradient;
+                ctx.fillRect(0, 0, width, height);
+
+                ctx.fillStyle = "rgba(255, 255, 255, 0.3)";
+                for (let i = 0; i < 50; i++) {
+                    const x = (i * 137.5) % width;
+                    const y = (i * 73.3) % height;
+                    const size = Math.random() * 2 + 1;
+                    const twinkle = Math.sin(Date.now() * 0.001 + i) * 0.5 + 0.5;
+                    ctx.globalAlpha = twinkle * 0.5;
+                    ctx.beginPath();
+                    ctx.arc(x, y, size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            function animate(currentTime) {
+                const deltaTime = lastFrameTime ? currentTime - lastFrameTime : 16.67;
+                lastFrameTime = currentTime;
+
+                const clampedDeltaTime = Math.min(deltaTime, 100);
+
+                drawBackground();
+
+                if (hearts.length < CONFIG.heartCount) {
+                    const timeSinceLastHeart = currentTime - lastHeartTime;
+                    const heartsToSpawn = Math.floor(timeSinceLastHeart / CONFIG.heartSpawnInterval);
+
+                    if (heartsToSpawn > 0) {
+                        const spawnCount = Math.min(heartsToSpawn, CONFIG.maxSpawnPerFrame);
+                        for (let i = 0; i < spawnCount; i++) {
+                            hearts.push(new Heart());
+                        }
+                        lastHeartTime = currentTime;
+                    }
+                }
+
+                for (let i = hearts.length - 1; i >= 0; i--) {
+                    hearts[i].update(clampedDeltaTime);
+                    hearts[i].draw();
+
+                    if (hearts[i].life <= 0) {
+                        hearts.splice(i, 1);
+                    }
+                }
+
+                drawBlessingText(clampedDeltaTime);
+
+                requestAnimationFrame(animate);
+            }
+
+            canvas.addEventListener("click", (e) => {
+                const burstCount = 15;
+                for (let i = 0; i < burstCount; i++) {
+                    const size = Math.random() * 20 + 10;
+                    const heart = new Heart(e.clientX, e.clientY, size, null, true);
+                    hearts.push(heart);
+                }
+            });
+
+            canvas.addEventListener("touchstart", (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const burstCount = 15;
+                for (let i = 0; i < burstCount; i++) {
+                    const size = Math.random() * 20 + 10;
+                    const heart = new Heart(touch.clientX, touch.clientY, size, null, true);
+                    hearts.push(heart);
+                }
+            });
+
+            window.addEventListener("resize", resizeCanvas);
+            resizeCanvas();
+            requestAnimationFrame(animate);
+        </script>
+    </body>
+</html>
