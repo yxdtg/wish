@@ -28,10 +28,20 @@
                 height: 100%;
                 touch-action: none;
             }
+
+            #open-prompt-button {
+                position: fixed;
+                top: 0;
+                right: 0;
+                width: 32px;
+                height: 32px;
+            }
         </style>
     </head>
     <body>
         <canvas id="canvas"></canvas>
+
+        <div id="open-prompt-button"></div>
 
         <script>
             function getUrlParams() {
@@ -41,22 +51,73 @@
                 };
             }
 
+            function openPrompt() {
+                const inputText = prompt("请输入祝福语");
+                if (inputText === null || inputText.length === 0) return;
+
+                const text = encodeURIComponent(inputText);
+                const prefix = window.location.href.split("?text=")[0];
+
+                const outputUrl = `${prefix}?text=${text}`;
+                window.navigator.clipboard.writeText(outputUrl);
+
+                alert("祝福链接已复制到剪切板");
+            }
+
+            let isInit = false;
+            window.addEventListener("pointerdown", (event) => {
+                event.preventDefault();
+
+                if (isInit) return;
+
+                isInit = true;
+
+                const audio = document.createElement("audio");
+                audio.autoplay = true;
+                audio.onload = () => {
+                    console.log("Audio loaded successfully");
+
+                    audio.play();
+                };
+                audio.onerror = () => {
+                    console.error("Failed to load audio");
+                };
+
+                audio.src = "./public/wish.mp3";
+
+                document.body.appendChild(audio);
+            });
+
+            let downCount = 0;
+            let timeoutId = null;
+
+            document.querySelector("#open-prompt-button").addEventListener("pointerdown", (event) => {
+                event.preventDefault();
+
+                if (timeoutId !== null) {
+                    window.clearTimeout(timeoutId);
+                }
+
+                downCount++;
+                if (downCount >= 2) {
+                    downCount = 0;
+
+                    openPrompt();
+                }
+
+                timeoutId = window.setTimeout(() => {
+                    downCount = 0;
+                    clearTimeout(timeoutId);
+                }, 250);
+            });
+
             window.addEventListener("keydown", (event) => {
                 if (event.repeat) return;
 
                 if (event.ctrlKey && event.code === "KeyG") {
                     event.preventDefault();
 
-                    const inputText = prompt("请输入祝福语");
-                    if (inputText === null || inputText.length === 0) return;
-
-                    const text = encodeURIComponent(inputText);
-                    const prefix = window.location.href.split("?text=")[0];
-
-                    const outputUrl = `${prefix}?text=${text}`;
-                    window.navigator.clipboard.writeText(outputUrl);
-
-                    alert("祝福链接已复制到剪切板");
+                    openPrompt();
                     return;
                 }
             });
